@@ -24,7 +24,7 @@ def setup_logging():
     log_file = log_dir / f'app_{datetime.now():%Y%m%d_%H%M%S}.log'
     
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,  # INFO yerine DEBUG
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler(log_file, encoding='utf-8'),

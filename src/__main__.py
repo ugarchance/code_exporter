@@ -20,14 +20,30 @@ def setup_logging():
     
     log_file = log_dir / f'app_{datetime.now():%Y%m%d_%H%M%S}.log'
     
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler(sys.stdout)
-        ]
+    # Root logger'ı yapılandır
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+    
+    # Formatlayıcı oluştur
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
+    
+    # Dosya handler'ı
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setFormatter(formatter)
+    
+    # Konsol handler'ı
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    
+    # Handler'ları ekle
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
+    # Test log mesajı
+    logging.info("Logging sistemi başlatıldı")
+    logging.debug("Debug modu aktif")
 
 def setup_dark_theme(app: QApplication) -> None:
     """Koyu tema renk şemasını ayarlar."""

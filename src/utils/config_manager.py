@@ -18,9 +18,42 @@ class ConfigManager:
         'window_position': {'x': 100, 'y': 100},
         'recent_projects': [],
         'recent_templates': [],
-        'dark_mode': False
+        'dark_mode': False,
+        'git': {
+            'enabled': True,
+            'cache_timeout': 300,  # 5 dakika
+            'max_diff_size': 1024 * 1024,  # 1MB
+            'auto_scan': True,  # Git değişikliklerini otomatik tara
+            'excluded_branches': ['gh-pages', 'release'],  # Yoksayılacak branch'ler
+            'diff_context_lines': 3  # Diff görünümünde gösterilecek bağlam satır sayısı
+        },
+        'recent_repositories': [],
     }
     
+    def get_git_config(self) -> dict:
+        """Git ayarlarını döndürür."""
+        return self.config.get('git', self.DEFAULT_CONFIG['git'])
+    
+    def set_git_config(self, git_config: dict) -> None:
+        """Git ayarlarını günceller."""
+        self.config['git'] = git_config
+        self.save_config()
+    
+    def add_recent_repository(self, repo_path: str) -> None:
+        """Son kullanılan Git repository'lerine yeni repo ekler."""
+        recent = self.config.get('recent_repositories', [])
+        
+        # Zaten varsa listeden çıkar
+        if repo_path in recent:
+            recent.remove(repo_path)
+            
+        # Başa ekle
+        recent.insert(0, repo_path)
+        
+        # Maksimum 10 repo tut
+        self.config['recent_repositories'] = recent[:10]
+        self.save_config()
+
     def __init__(self, config_dir: str | Path):
         """
         Args:

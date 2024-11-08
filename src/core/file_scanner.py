@@ -144,16 +144,31 @@ class FileScanner:
         
         return self._scanned_files
     
-    def filter_files(self, search_term: str = "") -> List[FileInfo]:
-        """Dosyaları arama terimine göre filtreler."""
-        if not search_term:
-            return self._scanned_files
+    def filter_files(self, text: str):
+        """Dosyaları filtreler."""
+        search_text = text.lower().strip()
+        self.visible_rows.clear()
+        
+        # 3 karakterden kısa aramaları ignore et
+        if len(search_text) < 3:
+            # Tüm satırları göster
+            for row in range(self.table.rowCount()):
+                self.table.setRowHidden(row, False)
+                self.visible_rows.add(row)
+            return
+                
+        # Her satırı kontrol et
+        for row in range(self.table.rowCount()):
+            file_name = self.table.item(row, 1).text().lower()
+            folder = self.table.item(row, 3).text().lower()
             
-        search_term = search_term.lower()
-        return [
-            file_info for file_info in self._scanned_files
-            if file_info.matches_search(search_term)
-        ]
+            match = search_text in file_name or search_text in folder
+            self.table.setRowHidden(row, not match)
+            if match:
+                self.visible_rows.add(row)
+                    
+        # İstatistikleri güncelle
+        self.update_info_label()
     
     def get_file_by_path(self, file_path: str | Path) -> FileInfo | None:
         """Belirtilen yoldaki dosyayı bulur."""

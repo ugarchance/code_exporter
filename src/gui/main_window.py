@@ -2,6 +2,13 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QSplitter, QMenuBar, QMenu, QMessageBox, QFileDialog,
                              QStatusBar, QDialog, QLabel, QLineEdit, QPushButton,
                              QCheckBox)
+
+from src.core import file_scanner
+from src.core.git.git_exceptions import GitException, GitInitError
+from src.core.git.git_manager import GitManager
+from src.gui.dialogs.git_settings_dialog import GitSettingsDialog
+from src.gui.dialogs.settings_dialog import SettingsDialog
+from src.gui.dialogs.statistics_dialog import StatisticsDialog
 from ..models.file_info import FileInfo
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon
@@ -16,168 +23,17 @@ from src.utils.config_manager import ConfigManager
 from src.gui.file_list_frame import FileListFrame
 from src.gui.export_frame import ExportFrame
 
-class SettingsDialog(QDialog):
-    """Ayarlar Dialog penceresi."""
-    
-    def __init__(self, config_manager: ConfigManager, parent=None):
-        super().__init__(parent)
-        self.config_manager = config_manager
-        self.init_ui()
-    
-    def init_ui(self):
-        """Dialog arayüzünü oluşturur."""
-        self.setWindowTitle("Ayarlar")
-        self.setMinimumWidth(400)
-        
-        layout = QVBoxLayout(self)
-        
-        # Tema seçimi
-        theme_layout = QHBoxLayout()
-        theme_layout.addWidget(QLabel("Tema:"))
-        self.dark_mode_cb = QCheckBox("Koyu Tema")
-        self.dark_mode_cb.setChecked(self.config_manager.get('dark_mode', False))
-        theme_layout.addWidget(self.dark_mode_cb)
-        layout.addLayout(theme_layout)
-        
-        # Paralel işlem sayısı
-        workers_layout = QHBoxLayout()
-        workers_layout.addWidget(QLabel("Paralel İşlem Sayısı:"))
-        self.workers_edit = QLineEdit()
-        self.workers_edit.setText(str(self.config_manager.get('max_workers', 4)))
-        workers_layout.addWidget(self.workers_edit)
-        layout.addLayout(workers_layout)
-        
-        # Yoksayılacak klasörler
-        excluded_layout = QVBoxLayout()
-        excluded_layout.addWidget(QLabel("Yoksayılacak Klasörler:"))
-        self.excluded_edit = QLineEdit()
-        current_excluded = self.config_manager.get('excluded_directories', [])
-        self.excluded_edit.setText(','.join(current_excluded))
-        excluded_layout.addWidget(self.excluded_edit)
-        layout.addLayout(excluded_layout)
-        
-        # Desteklenen dosya uzantıları
-        extensions_layout = QVBoxLayout()
-        extensions_layout.addWidget(QLabel("Desteklenen Dosya Uzantıları:"))
-        self.extensions_edit = QLineEdit()
-        current_extensions = self.config_manager.get('supported_extensions', [])
-        self.extensions_edit.setText(','.join(current_extensions))
-        extensions_layout.addWidget(self.extensions_edit)
-        layout.addLayout(extensions_layout)
-        
-        # Kaydetme düğmesi
-        button_box = QHBoxLayout()
-        save_btn = QPushButton("Kaydet")
-        save_btn.clicked.connect(self.save_settings)
-        cancel_btn = QPushButton("İptal")
-        cancel_btn.clicked.connect(self.reject)
-        button_box.addWidget(save_btn)
-        button_box.addWidget(cancel_btn)
-        layout.addLayout(button_box)
-    
-    def save_settings(self):
-        """Ayarları kaydeder."""
-        try:
-            # Tema ayarı
-            self.config_manager.set('dark_mode', self.dark_mode_cb.isChecked())
-            
-            # Paralel işlem sayısı
-            workers = int(self.workers_edit.text())
-            if 1 <= workers <= 16:
-                self.config_manager.set('max_workers', workers)
-            
-            # Yoksayılan klasörler
-            excluded = [d.strip() for d in self.excluded_edit.text().split(',') if d.strip()]
-            self.config_manager.set('excluded_directories', excluded)
-            
-            # Dosya uzantıları
-            extensions = [e.strip() for e in self.extensions_edit.text().split(',') if e.strip()]
-            self.config_manager.set('supported_extensions', extensions)
-            
-            # Dialog'u kapat
-            self.accept()
-            
-            # Yeniden başlatma gerektiğini bildir
-            QMessageBox.information(
-                self,
-                "Ayarlar Kaydedildi",
-                "Bazı ayarların etkili olması için uygulamayı yeniden başlatmanız gerekebilir."
-            )
-            
-        except ValueError as e:
-            QMessageBox.warning(self, "Hata", str(e))
-            
-class StatisticsDialog(QDialog):
-    """İstatistikler Dialog penceresi."""
-    
-    def __init__(self, file_list_frame: FileListFrame, parent=None):
-        super().__init__(parent)
-        self.file_list_frame = file_list_frame
-        self.init_ui()
-    
-    def init_ui(self):
-        """Dialog arayüzünü oluşturur."""
-        self.setWindowTitle("İstatistikler")
-        self.setMinimumWidth(400)
-        
-        layout = QVBoxLayout(self)
-        
-        # İstatistikleri hesapla
-        stats = self.calculate_statistics()
-        
-        # İstatistikleri göster
-        for label, value in stats.items():
-            stat_layout = QHBoxLayout()
-            stat_layout.addWidget(QLabel(f"{label}:"))
-            stat_layout.addWidget(QLabel(str(value)))
-            layout.addLayout(stat_layout)
-        
-        # Kapat düğmesi
-        close_btn = QPushButton("Kapat")
-        close_btn.clicked.connect(self.accept)
-        layout.addWidget(close_btn)
-    
-    def calculate_statistics(self) -> Dict[str, Any]:
-        """İstatistikleri hesaplar."""
-        files = self.file_list_frame.get_files()
-        selected = self.file_list_frame.get_selected_files()
-        
-        stats = {
-            "Toplam Dosya Sayısı": len(files),
-            "Seçili Dosya Sayısı": len(selected),
-            "Toplam Boyut": self.format_total_size(files),
-            "Seçili Dosyaların Boyutu": self.format_total_size(selected),
-        }
-        
-        # Dosya türlerine göre dağılım
-        extension_stats = {}
-        for file in files:
-            ext = file.extension.lower()
-            extension_stats[ext] = extension_stats.get(ext, 0) + 1
-        
-        for ext, count in extension_stats.items():
-            stats[f"{ext} Dosya Sayısı"] = count
-        
-        return stats
-    
-    def format_total_size(self, files: List['FileInfo']) -> str:
-        """Toplam boyutu formatlar."""
-        total_size = sum(f.path.stat().st_size for f in files)
-        
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if total_size < 1024:
-                return f"{total_size:.1f} {unit}"
-            total_size /= 1024
-            
-        return f"{total_size:.1f} TB"
 
 class MainWindow(QMainWindow):
     """Ana program penceresi."""
     
     def __init__(self, config_manager: ConfigManager):
         super().__init__()
-        self.config_manager = config_manager
-        
+        self.config_manager = config_manager 
+        logging.info("Git manager başlatılıyor...")
+        self.git_manager = GitManager()
+        logging.info("Git manager başlatıldı")
+        self.file_list = None
         # Pencere başlığı ve boyutu
         self.setWindowTitle("Kod Dışa Aktarma Aracı")
         self.setMinimumSize(1024, 768)
@@ -209,6 +65,27 @@ class MainWindow(QMainWindow):
         # Dosya menüsü
         file_menu = menubar.addMenu("Dosya")
         
+         # Git menüsü
+        git_menu = menubar.addMenu("Git")
+    
+        # Repository yenile
+        refresh_action = QAction("Repository Yenile", self)
+        refresh_action.setShortcut("Ctrl+R")
+        refresh_action.triggered.connect(self.refresh_git_status)
+        git_menu.addAction(refresh_action)
+        
+        # Branch değiştir
+        branch_menu = QMenu("Branch Değiştir", self)
+        git_menu.addMenu(branch_menu)
+        
+        # Git ayarları
+        git_settings_action = QAction("Git Ayarları", self)
+        git_settings_action.triggered.connect(self.show_git_settings)
+        git_menu.addAction(git_settings_action)
+        
+        # Görünüm menüsü
+        view_menu = menubar.addMenu("Görünüm")     
+
         # Klasör Aç
         open_action = QAction("Klasör Aç...", self)
         open_action.setShortcut("Ctrl+O")
@@ -268,7 +145,7 @@ class MainWindow(QMainWindow):
         )
         
         # Dosya listesi paneli
-        self.file_list = FileListFrame(file_scanner)
+        self.file_list = FileListFrame(file_scanner, git_manager=self.git_manager)
         self.splitter.addWidget(self.file_list)
         
         # Dışa aktarma paneli
@@ -291,6 +168,28 @@ class MainWindow(QMainWindow):
         self.export_frame.export_completed.connect(self.on_export_completed)
         self.export_frame.export_failed.connect(self.on_export_failed)
     
+    
+    def show_git_settings(self):
+        """Git ayarları penceresini gösterir."""
+        # Git ayarları dialog'unu göster
+        dialog = GitSettingsDialog(self.config_manager, self)
+        dialog.exec()
+        
+    def refresh_git_status(self):
+        """Git durumunu yeniler."""
+        if self.git_manager:
+            try:
+                current_dir = self.file_list.current_directory
+                if current_dir:
+                    changes = self.git_manager.check_changes(Path(current_dir))
+                    self.file_list.update_git_status(changes)
+            except GitException as e:
+                QMessageBox.warning(
+                    self,
+                    "Git Hatası",
+                    f"Git durumu güncellenirken hata oluştu:\n{str(e)}"
+                )
+
     def select_directory(self):
         """Klasör seçme dialogunu açar."""
         directory = QFileDialog.getExistingDirectory(
@@ -356,6 +255,11 @@ class MainWindow(QMainWindow):
     def show_settings(self):
         """Ayarlar penceresini gösterir."""
         dialog = SettingsDialog(self.config_manager, self)
+        dialog.exec()
+    
+    def show_git_settings(self):
+        """Git ayarları penceresini gösterir."""
+        dialog = GitSettingsDialog(self.config_manager, self)
         dialog.exec()
     
     def show_statistics(self):

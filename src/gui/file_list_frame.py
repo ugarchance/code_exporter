@@ -1,12 +1,17 @@
+import logging
 from PyQt6.QtWidgets import (QFrame, QVBoxLayout, QHBoxLayout, QLineEdit,
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QLabel, QProgressDialog, QApplication,
-                             QCheckBox)
+                             QCheckBox, QRadioButton)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 import os
 from pathlib import Path
 import time
+from PyQt6.QtGui import QIcon, QColor
+from src.core.git.git_manager import GitManager
+from src.core.git.git_exceptions import GitException
+from src.core.git.git_types import GitFileStatus
 
 class FileListFrame(QFrame):
     """Basitleştirilmiş dosya listesi görünümü."""
@@ -14,14 +19,73 @@ class FileListFrame(QFrame):
     # Seçili dosyalar sinyali
     selection_changed = pyqtSignal(list)
     
-    def __init__(self, file_scanner=None):
+    def __init__(self, file_scanner=None, git_manager=None):
         super().__init__()
         self.file_scanner = file_scanner  # file_scanner'ı sakla
+        self.git_manager = git_manager
+        self.current_directory = None
+        self.git_status = {} 
         self.total_files = 0
         self.selected_files = set()
         self.visible_rows = set()  # Görünür satırları takip etmek için
         self.setup_ui()
+        
+        self.table.setColumnCount(6)  # 5'ten 6'ya çıkarıldı
+        self.table.setHorizontalHeaderLabels(
+        ["", "Dosya Adı", "Uzantı", "Klasör", "Boyut", "Git"]  # Git sütunu en sonda
+    )
 
+    def update_git_status(self, status: dict):
+        """Git durumunu günceller ve tabloyu yeniler."""
+        self.git_status = status
+        
+        # Tablo görünümünü güncelle
+        for row in range(self.table.rowCount()):
+            # DÜZELTME: Dosya adı 1. sütunda olmalı (2 değil)
+            name_item = self.table.item(row, 1)  
+            if name_item is None:
+                continue
+                
+            file_path_data = name_item.data(Qt.ItemDataRole.UserRole)
+            if file_path_data is None:
+                continue
+                
+            try:
+                file_path = Path(file_path_data)
+                if file_path in self.git_status:
+                    status = self.git_status[file_path]
+                    self._set_git_status_cell(row, status)
+            except Exception as e:
+                logging.warning(f"Git durumu güncellenirken hata: {e}")
+        
+        # Git filtresini yeniden uygula
+        self.apply_git_filter()
+        
+    def _set_git_status_cell(self, row: int, status: GitFileStatus):
+        """Git durumu hücresini ayarlar."""
+        item = QTableWidgetItem()
+        
+        if status == GitFileStatus.MODIFIED:
+            item.setText("✎ M")  # Kalem emoji ile Modified
+            item.setBackground(QColor(255, 255, 150))  # Daha belirgin sarı
+            item.setToolTip("Modified - Dosya değiştirildi")
+        elif status == GitFileStatus.ADDED:
+            item.setText("+ A")  # Plus işareti ile Added
+            item.setBackground(QColor(150, 255, 150))  # Daha belirgin yeşil
+            item.setToolTip("Added - Dosya eklendi")
+        elif status == GitFileStatus.DELETED:
+            item.setText("- D")  # Eksi işareti ile Deleted
+            item.setBackground(QColor(255, 150, 150))  # Daha belirgin kırmızı
+            item.setToolTip("Deleted - Dosya silindi")
+        elif status == GitFileStatus.UNTRACKED:
+            item.setText("? U")  # Soru işareti ile Untracked
+            item.setBackground(QColor(200, 200, 200))  # Gri
+            item.setToolTip("Untracked - Git tarafından takip edilmiyor")
+        
+        item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.table.setItem(row, 5, item)  # Git durumu en sonda
+
+        
     def setup_ui(self):
         """Kullanıcı arayüzünü oluşturur."""
         layout = QVBoxLayout(self)
@@ -37,7 +101,12 @@ class FileListFrame(QFrame):
         
         # Seçim Butonları Grubu için Container
         selection_buttons = QHBoxLayout()
-        
+
+         # Git Yenile Butonu
+        refresh_btn = QPushButton("Git Durumunu Yenile")
+        refresh_btn.clicked.connect(self.refresh_git_status)
+        top_bar.addWidget(refresh_btn)
+            
         # Arama Sonuçlarını Seç
         select_results_btn = QPushButton("Sonuçları Seç")
         select_results_btn.clicked.connect(lambda: self.toggle_search_results_selection(True))
@@ -69,29 +138,59 @@ class FileListFrame(QFrame):
         
         # Dosya Tablosu
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["", "Dosya Adı", "Uzantı", "Klasör", "Boyut"])
-        
-        # Tablo Ayarları
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels(
+            ["", "Dosya Adı", "Uzantı", "Klasör", "Boyut", "Git"]  # Git sütunu en sonda
+        )
+      # Tablo Ayarları
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # Checkbox
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Dosya
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Dosya adı
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)  # Uzantı
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Klasör
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)  # Boyut
-        
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)  # Git durumut
+            
         self.table.setColumnWidth(0, 30)  # Checkbox
         self.table.setColumnWidth(2, 70)  # Uzantı
         self.table.setColumnWidth(4, 100)  # Boyut
-        
-        # Tablo Performans Ayarları
-        self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self.table.setShowGrid(False)
-        self.table.setAlternatingRowColors(True)
-        self.table.verticalHeader().setVisible(False)
+        self.table.setColumnWidth(5, 40)  # Git durumu
         
         layout.addWidget(self.table)
+
+        filter_group = QHBoxLayout()
+    
+        # Git filtre butonları
+        self.filter_all = QRadioButton("Tümü")
+        self.filter_modified = QRadioButton("Değişenler")
+        self.filter_added = QRadioButton("Yeniler")
+        self.filter_untracked = QRadioButton("Takip Edilmeyenler")
         
+        self.filter_all.setChecked(True)  # Varsayılan olarak tümünü göster
+        
+        filter_group.addWidget(QLabel("Git Filtresi:"))
+        filter_group.addWidget(self.filter_all)
+        filter_group.addWidget(self.filter_modified)
+        filter_group.addWidget(self.filter_added)
+        filter_group.addWidget(self.filter_untracked)
+        
+        # Signal bağlantıları
+        self.filter_all.toggled.connect(self.apply_git_filter)
+        self.filter_modified.toggled.connect(self.apply_git_filter)
+        self.filter_added.toggled.connect(self.apply_git_filter)
+        self.filter_untracked.toggled.connect(self.apply_git_filter)
+        
+        layout.addLayout(filter_group)
+   
+    def refresh_git_status(self):
+        """Git durumunu manuel olarak yeniler."""
+        if self.git_manager and self.current_directory:
+            try:
+                status = self.git_manager.check_changes(Path(self.current_directory))
+                self.update_git_status(status)  # Bu metodu çağırdığınızdan emin olun
+            except GitException as e:
+                logging.error(f"Git durumu alınamadı: {e}")
+                
     def format_size(self, size):
         """Dosya boyutunu formatlar."""
         for unit in ['B', 'KB', 'MB', 'GB']:
@@ -111,9 +210,18 @@ class FileListFrame(QFrame):
         
         try:
             start_time = time.time()
+            logging.info(f"Klasör taraması başlıyor: {directory}")
+            if (Path(directory) / '.git').exists():
+                logging.info("Git repository tespit edildi")  
             directory = Path(directory)
             self.current_directory = directory
-            
+           
+            if self.git_manager:
+                try:
+                    status = self.git_manager.check_changes(self.current_directory)
+                    self.update_git_status(status)
+                except GitException as e:
+                    logging.warning(f"Git durumu alınamadı: {e}")
             # Tabloyu temizle
             self.table.setRowCount(0)
             self.selected_files.clear()
@@ -157,24 +265,33 @@ class FileListFrame(QFrame):
             self.table.setRowCount(len(files_data))
             for row, data in enumerate(files_data):
                 # Checkbox
+                   # Checkbox
                 checkbox = QTableWidgetItem()
                 checkbox.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
                 checkbox.setCheckState(Qt.CheckState.Unchecked)
                 self.table.setItem(row, 0, checkbox)
                 
-                # Dosya bilgileri
-                self.table.setItem(row, 1, QTableWidgetItem(data['name']))
-                self.table.setItem(row, 2, QTableWidgetItem(data['ext']))
-                self.table.setItem(row, 3, QTableWidgetItem(data['folder']))
-                self.table.setItem(row, 4, QTableWidgetItem(self.format_size(data['size'])))
+                # Dosya bilgileri (eski sıra)
+                self.table.setItem(row, 1, QTableWidgetItem(data['name']))  # Dosya adı
+                self.table.setItem(row, 2, QTableWidgetItem(data['ext']))   # Uzantı
+                self.table.setItem(row, 3, QTableWidgetItem(data['folder'])) # Klasör
+                self.table.setItem(row, 4, QTableWidgetItem(self.format_size(data['size']))) # Boyut
                 
-                # Dosya yolunu gizli data olarak sakla
+                # Git durumu sütununu en sona ekleyelim (yeni sütun)
+                self.table.setItem(row, 5, QTableWidgetItem(""))  # Git durumu için boş hücre
+                
+                # Dosya yolunu gizli data olarak sakla (eski yerinde kalsın)
                 self.table.item(row, 1).setData(Qt.ItemDataRole.UserRole, data['path'])
                 
                 # Her 1000 satırda bir UI'ı güncelle
                 if row % 1000 == 0:
                     QApplication.processEvents()
-            
+            if self.git_manager and self.current_directory:
+                try:
+                    status = self.git_manager.check_changes(self.current_directory)
+                    self.update_git_status(status)
+                except GitException as e:
+                    logging.warning(f"Git durumu alınamadı: {e}")        
             # İstatistikleri güncelle
             duration = time.time() - start_time
             self.total_files = len(files_data)
@@ -297,3 +414,28 @@ class FileListFrame(QFrame):
     def get_selected_files(self) -> list:
         """Seçili dosya yollarını döndürür."""
         return list(self.selected_files)
+    
+    def apply_git_filter(self):
+        """Git durumuna göre dosyaları filtreler"""
+        # Tüm satırları görünür yap
+        self.visible_rows.clear()
+        
+        for row in range(self.table.rowCount()):
+            file_path = Path(self.table.item(row, 1).data(Qt.ItemDataRole.UserRole))
+            show_row = False
+            
+            if self.filter_all.isChecked():
+                show_row = True
+            elif file_path in self.git_status:
+                status = self.git_status[file_path]
+                if (self.filter_modified.isChecked() and status == GitFileStatus.MODIFIED or
+                    self.filter_added.isChecked() and status == GitFileStatus.ADDED or
+                    self.filter_untracked.isChecked() and status == GitFileStatus.UNTRACKED):
+                    show_row = True
+                    
+            self.table.setRowHidden(row, not show_row)
+            if show_row:
+                self.visible_rows.add(row)
+        
+        # İstatistikleri güncelle
+        self.update_info_label()
