@@ -39,10 +39,15 @@ class FileListFrame(QFrame):
         """Git durumunu günceller ve tabloyu yeniler."""
         self.git_status = status
         
+        # Git değişikliklerini say
+        modified_count = sum(1 for s in status.values() if s == GitFileStatus.MODIFIED)
+        added_count = sum(1 for s in status.values() if s == GitFileStatus.ADDED)
+        deleted_count = sum(1 for s in status.values() if s == GitFileStatus.DELETED)
+        untracked_count = sum(1 for s in status.values() if s == GitFileStatus.UNTRACKED)
+        
         # Tablo görünümünü güncelle
         for row in range(self.table.rowCount()):
-            # DÜZELTME: Dosya adı 1. sütunda olmalı (2 değil)
-            name_item = self.table.item(row, 1)  
+            name_item = self.table.item(row, 1)
             if name_item is None:
                 continue
                 
@@ -53,13 +58,19 @@ class FileListFrame(QFrame):
             try:
                 file_path = Path(file_path_data)
                 if file_path in self.git_status:
-                    status = self.git_status[file_path]
-                    self._set_git_status_cell(row, status)
+                    self._set_git_status_cell(row, self.git_status[file_path])
             except Exception as e:
                 logging.warning(f"Git durumu güncellenirken hata: {e}")
         
-        # Git filtresini yeniden uygula
-        self.apply_git_filter()
+        # Bilgi etiketini güncelle
+        status_info = (
+            f"Git değişiklikleri: "
+            f"{modified_count} değişen, "
+            f"{added_count} yeni, "
+            f"{deleted_count} silinen, "
+            f"{untracked_count} takip edilmeyen"
+        )
+        self.update_info_label(status_info)
         
     def _set_git_status_cell(self, row: int, status: GitFileStatus):
         """Git durumu hücresini ayarlar."""
@@ -157,27 +168,30 @@ class FileListFrame(QFrame):
         self.table.setColumnWidth(5, 40)  # Git durumu
         
         layout.addWidget(self.table)
-
+        
         filter_group = QHBoxLayout()
     
         # Git filtre butonları
         self.filter_all = QRadioButton("Tümü")
         self.filter_modified = QRadioButton("Değişenler")
-        self.filter_added = QRadioButton("Yeniler")
+        self.filter_added = QRadioButton("Yeniler") 
+        self.filter_deleted = QRadioButton("Silinenler")  # Eksik olan buton
         self.filter_untracked = QRadioButton("Takip Edilmeyenler")
         
-        self.filter_all.setChecked(True)  # Varsayılan olarak tümünü göster
+        self.filter_all.setChecked(True)
         
         filter_group.addWidget(QLabel("Git Filtresi:"))
         filter_group.addWidget(self.filter_all)
         filter_group.addWidget(self.filter_modified)
         filter_group.addWidget(self.filter_added)
+        filter_group.addWidget(self.filter_deleted)  # Yeni eklenen
         filter_group.addWidget(self.filter_untracked)
         
         # Signal bağlantıları
         self.filter_all.toggled.connect(self.apply_git_filter)
         self.filter_modified.toggled.connect(self.apply_git_filter)
         self.filter_added.toggled.connect(self.apply_git_filter)
+        self.filter_deleted.toggled.connect(self.apply_git_filter)  # Yeni eklenen
         self.filter_untracked.toggled.connect(self.apply_git_filter)
         
         layout.addLayout(filter_group)
@@ -186,11 +200,27 @@ class FileListFrame(QFrame):
         """Git durumunu manuel olarak yeniler."""
         if self.git_manager and self.current_directory:
             try:
+                logging.info(f"Git durumu yenileniyor: {self.current_directory}")
                 status = self.git_manager.check_changes(Path(self.current_directory))
-                self.update_git_status(status)  # Bu metodu çağırdığınızdan emin olun
+                
+                logging.info(f"Git durumu alındı: {status}")
+                self.update_git_status(status)
+                
+                # Değişiklik sayılarını hesapla
+                modified_count = sum(1 for s in status.values() if s == GitFileStatus.MODIFIED)
+                added_count = sum(1 for s in status.values() if s == GitFileStatus.ADDED)
+                deleted_count = sum(1 for s in status.values() if s == GitFileStatus.DELETED)
+                
+                status_info = (f"Git değişiklikleri: "
+                            f"{modified_count} modified, "
+                            f"{added_count} added, "
+                            f"{deleted_count} deleted")
+                logging.info(status_info)
+                self.update_info_label(status_info)
+                
             except GitException as e:
                 logging.error(f"Git durumu alınamadı: {e}")
-                
+                self.update_info_label(f"Git hatası: {str(e)}")
     def format_size(self, size):
         """Dosya boyutunu formatlar."""
         for unit in ['B', 'KB', 'MB', 'GB']:
@@ -414,28 +444,52 @@ class FileListFrame(QFrame):
     def get_selected_files(self) -> list:
         """Seçili dosya yollarını döndürür."""
         return list(self.selected_files)
-    
+
     def apply_git_filter(self):
         """Git durumuna göre dosyaları filtreler"""
-        # Tüm satırları görünür yap
         self.visible_rows.clear()
+        
+        # Git durumlarını say
+        status_counts = {
+            GitFileStatus.MODIFIED: 0,
+            GitFileStatus.ADDED: 0,
+            GitFileStatus.DELETED: 0,
+            GitFileStatus.UNTRACKED: 0
+        }
         
         for row in range(self.table.rowCount()):
             file_path = Path(self.table.item(row, 1).data(Qt.ItemDataRole.UserRole))
             show_row = False
             
             if self.filter_all.isChecked():
+                # Tümü seçiliyse her dosyayı göster
                 show_row = True
-            elif file_path in self.git_status:
+            else:
+                # Dosya Git durumuna sahipse ve ilgili filtre seçiliyse göster
+                if file_path in self.git_status:
+                    status = self.git_status[file_path]
+                    if ((self.filter_modified.isChecked() and status == GitFileStatus.MODIFIED) or
+                        (self.filter_added.isChecked() and status == GitFileStatus.ADDED) or
+                        (self.filter_deleted.isChecked() and status == GitFileStatus.DELETED) or
+                        (self.filter_untracked.isChecked() and status == GitFileStatus.UNTRACKED)):
+                        show_row = True
+            
+            # Git durumlarını say
+            if file_path in self.git_status:
                 status = self.git_status[file_path]
-                if (self.filter_modified.isChecked() and status == GitFileStatus.MODIFIED or
-                    self.filter_added.isChecked() and status == GitFileStatus.ADDED or
-                    self.filter_untracked.isChecked() and status == GitFileStatus.UNTRACKED):
-                    show_row = True
-                    
+                if status in status_counts:
+                    status_counts[status] += 1
+            
+            # Satırı göster/gizle
             self.table.setRowHidden(row, not show_row)
             if show_row:
                 self.visible_rows.add(row)
         
-        # İstatistikleri güncelle
+        # Filtre butonlarının etiketlerini güncelle
+        self.filter_modified.setText(f"Değişenler ({status_counts[GitFileStatus.MODIFIED]})")
+        self.filter_added.setText(f"Yeniler ({status_counts[GitFileStatus.ADDED]})")
+        self.filter_deleted.setText(f"Silinenler ({status_counts[GitFileStatus.DELETED]})")
+        self.filter_untracked.setText(f"Takip Edilmeyenler ({status_counts[GitFileStatus.UNTRACKED]})")
+        
+        # Bilgi etiketini güncelle
         self.update_info_label()
