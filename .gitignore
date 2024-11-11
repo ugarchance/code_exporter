@@ -17,3 +17,7 @@ dist/
 *.egg-info/
 *.spec
 **/__pycache__/
+Output/
+dosyalar.txt
+setup.iss
+.github/workflows/release.yml
