@@ -1,0 +1,67 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+    
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Get Version
+      id: get_version
+      run: |
+        $version = (Get-Content version.json | ConvertFrom-Json).version
+        echo "VERSION=$version" >> $env:GITHUB_ENV
+      shell: pwsh
+    
+    - name: Build with PyInstaller
+      run: |
+        python build.py
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release v${{ env.VERSION }}
+        body: |
+          Code Exporter v${{ env.VERSION }}
+          
+          Değişiklikler:
+          - Yeni sürüm yayınlandı
+          
+          Kurulum:
+          1. CodeExporter.exe dosyasını indirin
+          2. İndirilen exe dosyasını çalıştırın
+          
+          Not: Windows Defender veya antivirüs programları exe dosyasını engelleyebilir.
+          Bu durumda dosyayı güvenilir olarak işaretleyin.
+        draft: false
+        prerelease: false
+    
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./dist/CodeExporter_v${{ env.VERSION }}_*.exe
+        asset_name: CodeExporter_v${{ env.VERSION }}.exe
+        asset_content_type: application/octet-stream

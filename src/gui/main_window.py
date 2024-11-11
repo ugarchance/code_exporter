@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QSplitter, QMenuBar, QMenu, QMessageBox, QFileDialog,
                              QStatusBar, QDialog, QLabel, QLineEdit, QPushButton,
-                             QCheckBox)
+                             QCheckBox, QProgressDialog)
 
 from src.core import file_scanner
 from src.core.git.git_exceptions import GitException, GitInitError
@@ -22,6 +22,7 @@ from typing import Optional, Dict, List, Any
 from src.utils.config_manager import ConfigManager
 from src.gui.file_list_frame import FileListFrame
 from src.gui.export_frame import ExportFrame
+from src.utils.updater import AutoUpdater
 
 
 class MainWindow(QMainWindow):
@@ -57,6 +58,13 @@ class MainWindow(QMainWindow):
         
         # Pencere ayarlarını yükle
         self.load_window_settings()
+        
+        # Otomatik güncelleme kontrolü
+        self.updater = AutoUpdater(
+            github_repo="kullaniciadi/code-exporter",
+            current_version=self.config_manager.get('version', '1.0.0')
+        )
+        self.check_for_updates()
     
     def create_menu_bar(self):
         """Menü çubuğunu oluşturur."""
@@ -324,3 +332,40 @@ class MainWindow(QMainWindow):
         # Pencere ayarlarını kaydet
         self.save_window_settings()
         event.accept()
+    
+    def check_for_updates(self):
+        """Güncellemeleri kontrol eder."""
+        update_available, new_version, download_url = self.updater.check_for_updates()
+        
+        if update_available:
+            reply = QMessageBox.question(
+                self,
+                "Güncelleme Mevcut",
+                f"Yeni sürüm mevcut: v{new_version}\n\nŞimdi güncellemek ister misiniz?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                progress = QProgressDialog(
+                    "Güncelleme indiriliyor...",
+                    "İptal",
+                    0,
+                    0,
+                    self
+                )
+                progress.setWindowModality(Qt.WindowModality.WindowModal)
+                
+                if self.updater.download_and_install_update(download_url):
+                    QMessageBox.information(
+                        self,
+                        "Güncelleme",
+                        "Güncelleme başarıyla indirildi. Program yeniden başlatılacak."
+                    )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Güncelleme Hatası",
+                        "Güncelleme indirilirken bir hata oluştu."
+                    )
+                
+                progress.close()
