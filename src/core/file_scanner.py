@@ -186,3 +186,44 @@ class FileScanner:
     def get_selected_files(self) -> List[FileInfo]:
         """Seçili dosyaları döndürür."""
         return [f for f in self._scanned_files if f.is_selected]
+
+    def _process_java_content(self, content: str) -> str:
+        """Java dosyasının içeriğindeki import satırlarını filtreler."""
+        lines = content.splitlines()
+        filtered_lines = [
+            line for line in lines 
+            if not line.strip().startswith("import ") and 
+               not line.strip().startswith("package ")
+        ]
+        return "\n".join(filtered_lines)
+
+    def _read_file_content(self, file_path: Path) -> str:
+        """
+        Dosya içeriğini okur ve gerekiyorsa filtreler.
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            # Debug için dosya tipini logla
+            logging.debug(f"Dosya uzantısı: {file_path.suffix}")
+                
+            # Java dosyası kontrolü
+            if str(file_path).lower().endswith('.java'):
+                lines = content.splitlines()
+                filtered_lines = []
+                
+                for line in lines:
+                    line = line.strip()
+                    # Import ve package satırlarını atla
+                    if line.startswith('import ') or line.startswith('package '):
+                        continue
+                    filtered_lines.append(line)
+                    
+                return '\n'.join(filtered_lines)
+                
+            return content
+            
+        except Exception as e:
+            logging.error(f"Dosya okuma hatası ({file_path}): {e}")
+            return ""

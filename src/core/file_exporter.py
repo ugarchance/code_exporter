@@ -34,6 +34,15 @@ Code:
             # Herhangi bir hata durumunda orijinal path'i döndür
             return str(file_path)
     
+    def _process_java_content(self, content: str) -> str:
+        """Java dosyasındaki import ve package satırlarını filtreler."""
+        lines = content.splitlines()
+        filtered_lines = [
+            line for line in lines
+            if not line.strip().startswith(("import ", "package "))
+        ]
+        return "\n".join(filtered_lines)
+
     def export_files(
         self,
         files: List[str],
@@ -88,6 +97,10 @@ Code:
                     # Dosya içeriğini oku
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
+                    
+                    # Java dosyası ise içeriği filtrele
+                    if str(file_path).lower().endswith('.java'):
+                        content = self._process_java_content(content)
                     
                     # Path'i formatla
                     display_path = self._format_display_path(file_path, ref_path)
