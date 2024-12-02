@@ -9,8 +9,9 @@ from src.core.git.git_manager import GitManager
 from src.gui.dialogs.git_settings_dialog import GitSettingsDialog
 from src.gui.dialogs.settings_dialog import SettingsDialog
 from src.gui.dialogs.statistics_dialog import StatisticsDialog
+from src.gui.splash_screen import SplashScreen
 from ..models.file_info import FileInfo
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QAction, QIcon
 from pathlib import Path
 import logging
@@ -30,6 +31,11 @@ class MainWindow(QMainWindow):
     
     def __init__(self, config_manager: ConfigManager):
         super().__init__()
+        
+        # Splash screen'i göster
+        self.splash = SplashScreen()
+        self.splash.start_animation()
+        
         self.config_manager = config_manager 
         logging.info("Git manager başlatılıyor...")
         self.git_manager = GitManager()
@@ -48,6 +54,9 @@ class MainWindow(QMainWindow):
         
         # Menü çubuğunu oluştur
         self.create_menu_bar()
+        
+        # Splash screen'in kapanmasını geciktir
+        QTimer.singleShot(2000, self.show)  # 2 saniye sonra ana pencereyi göster
         
         # Splitter ve panelleri oluştur
         self.create_panels()
