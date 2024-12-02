@@ -14,3 +14,9 @@ packaging>=21.3
 
 # Build Tools
 PyInstaller>=6.0.0
+
+# AI Integration
+google-generativeai>=0.3.0
+
+# Documentation
+Markdown>=3.4.0

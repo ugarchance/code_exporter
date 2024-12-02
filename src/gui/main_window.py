@@ -24,6 +24,7 @@ from src.utils.config_manager import ConfigManager
 from src.gui.file_list_frame import FileListFrame
 from src.gui.export_frame import ExportFrame
 from src.utils.updater import AutoUpdater
+from src.gui.documentation_screen import DocumentationScreen
 
 
 class MainWindow(QMainWindow):
@@ -74,6 +75,8 @@ class MainWindow(QMainWindow):
             current_version=self.config_manager.get('version', '1.0.0')
         )
         self.check_for_updates()
+        
+        self.documentation_screen = None
     
     def create_menu_bar(self):
         """Menü çubuğunu oluşturur."""
@@ -144,6 +147,15 @@ class MainWindow(QMainWindow):
         about_action = QAction("Hakkında", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
+        
+        # Dokümantasyon menüsü
+        documentation_menu = menubar.addMenu('Dokümantasyon')
+        
+        # Dokümantasyon oluşturma aksiyonu
+        create_doc_action = QAction('Dokümantasyon Oluştur', self)
+        create_doc_action.setStatusTip('Kod için teknik dokümantasyon oluştur')
+        create_doc_action.triggered.connect(self.show_documentation_screen)
+        documentation_menu.addAction(create_doc_action)
     
     def create_panels(self):
         """Panel yerleşimini oluşturur."""
@@ -378,3 +390,23 @@ class MainWindow(QMainWindow):
                     )
                 
                 progress.close()
+    
+    def show_documentation_screen(self):
+        try:
+            if not self.documentation_screen:
+                # Mevcut çalışma dizinini kullan
+                current_path = os.getcwd()
+                if hasattr(self, 'current_directory'):
+                    current_path = self.current_directory
+                elif hasattr(self, 'file_list') and hasattr(self.file_list, 'current_directory'):
+                    current_path = self.file_list.current_directory
+                
+                self.documentation_screen = DocumentationScreen(current_path)
+            self.documentation_screen.show()
+        except Exception as e:
+            logging.error(f"Dokümantasyon ekranı açılırken hata oluştu: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "Hata",
+                f"Dokümantasyon ekranı açılırken bir hata oluştu:\n{str(e)}"
+            )
