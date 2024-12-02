@@ -550,23 +550,31 @@ class FileListFrame(QFrame):
     def _on_view_changed(self, checked):
         """Görünüm değişikliğini yönetir."""
         try:
+            # Mevcut seçimleri geçici olarak sakla
+            current_selections = self.selected_files.copy()
+            
             if checked:  # Liste görünümü
                 self.stack_widget.setCurrentWidget(self.table)
                 if hasattr(self, '_current_folder_structure'):
                     self._update_list_view()
+                    # Liste görünümüne geçerken seçili dosyaları koru
+                    self.selected_files = current_selections
+                    self._restore_list_selections()
             else:  # Klasör görünümü
                 self.stack_widget.setCurrentWidget(self.folder_tree)
                 if hasattr(self, '_current_folder_structure'):
                     self._update_folder_view()
-                    
-            # Geçiş sırasında seçimleri koru
-            if self.selected_files:
-                if checked:  # Liste görünümüne geçiş
-                    self._restore_list_selections()
-                else:  # Klasör görünümüne geçiş
+                    # Klasör görünümüne geçerken seçili dosyaları koru
+                    self.selected_files = current_selections
                     self._restore_tree_selections()
+                    # Klasör durumlarını güncelle
+                    root = self.folder_tree.invisibleRootItem()
+                    for i in range(root.childCount()):
+                        self._update_folder_check_state(root.child(i))
         except Exception as e:
             logging.error(f"Görünüm değiştirme hatası: {str(e)}")
+            # Hata durumunda seçimleri geri yükle
+            self.selected_files = current_selections
    
     def _restore_tree_selections(self):
         """Ağaç görünümünde seçimleri geri yükler."""
@@ -584,14 +592,28 @@ class FileListFrame(QFrame):
 
     def _restore_list_selections(self):
         """Liste görünümünde seçimleri geri yükler."""
-        for row in range(self.table.rowCount()):
-            name_item = self.table.item(row, 1)
-            if name_item:
-                file_path = name_item.data(Qt.ItemDataRole.UserRole)
-                if file_path in self.selected_files:
-                    checkbox = self.table.item(row, 0)
-                    if checkbox:
-                        checkbox.setCheckState(Qt.CheckState.Checked)
+        # Sinyal bağlantısını geçici olarak kaldır
+        self.table.itemChanged.disconnect(self.on_item_changed)
+        
+        try:
+            for row in range(self.table.rowCount()):
+                name_item = self.table.item(row, 1)
+                if name_item:
+                    file_path = name_item.data(Qt.ItemDataRole.UserRole)
+                    if file_path in self.selected_files:
+                        checkbox = self.table.item(row, 0)
+                        if checkbox:
+                            checkbox.setCheckState(Qt.CheckState.Checked)
+                        else:
+                            # Eğer checkbox item henüz oluşturulmamışsa oluştur
+                            checkbox = QTableWidgetItem()
+                            checkbox.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+                            checkbox.setCheckState(Qt.CheckState.Checked)
+                            self.table.setItem(row, 0, checkbox)
+        finally:
+            # Sinyal bağlantısını geri ekle
+            self.table.itemChanged.connect(self.on_item_changed)
+
     def switch_view(self, view_type: str):
         """Belirli bir görünüme geçer."""
         if view_type == 'list':
@@ -628,10 +650,22 @@ class FileListFrame(QFrame):
         """Klasör görünümünü günceller."""
         if not hasattr(self, '_current_folder_structure'):
             return
+            
+        # Mevcut seçimleri geçici olarak sakla
+        current_selections = self.selected_files.copy()
         
         self.folder_tree.clear()
         self._populate_folder_tree(self.folder_tree.invisibleRootItem(), 
                                 self._current_folder_structure)
+                                
+        # Seçimleri geri yükle
+        self.selected_files = current_selections
+        self._restore_tree_selections()
+        
+        # Klasör durumlarını güncelle
+        root = self.folder_tree.invisibleRootItem()
+        for i in range(root.childCount()):
+            self._update_folder_check_state(root.child(i))
 
     def _populate_folder_tree(self, parent_item, folder_dict):
         """Klasör ağacını doldurur."""
@@ -671,9 +705,11 @@ class FileListFrame(QFrame):
         if not hasattr(self, '_current_folder_structure'):
             return
             
+        # Mevcut seçimleri geçici olarak sakla
+        current_selections = self.selected_files.copy()
+        
         # Tabloyu temizle
         self.table.setRowCount(0)
-        self.selected_files.clear()
         
         # Dosyaları düz liste halinde topla
         files_data = []
@@ -692,6 +728,9 @@ class FileListFrame(QFrame):
         self.table.setRowCount(len(files_data))
         for row, data in enumerate(files_data):
             self._add_file_to_table(row, data)
+            
+        # Seçimleri geri yükle
+        self.selected_files = current_selections
 
     def _set_tree_item_git_status(self, item: QTreeWidgetItem, status: GitFileStatus):
         """Ağaç görünümünde Git durumunu ayarlar."""
