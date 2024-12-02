@@ -2,9 +2,10 @@ import logging
 from PyQt6.QtWidgets import (QFrame, QVBoxLayout, QHBoxLayout, QLineEdit,
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QLabel, QProgressDialog, QApplication,
-                             QCheckBox, QRadioButton, QTreeWidget, QTreeWidgetItem, QButtonGroup, QStackedWidget)
+                             QCheckBox, QRadioButton, QTreeWidget, QTreeWidgetItem, QButtonGroup, QStackedWidget,
+                             QDialog, QTextEdit)
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QIcon
 import os
 from pathlib import Path
 import time
@@ -147,9 +148,9 @@ class FileListFrame(QFrame):
 
         # Liste görünümü ayarları
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
+        self.table.setColumnCount(7)  # Önizleme sütunu eklendi
         self.table.setHorizontalHeaderLabels(
-            ["", "Dosya Adı", "Uzantı", "Klasör", "Boyut", "Git"]
+            ["", "Dosya Adı", "Uzantı", "Klasör", "Boyut", "Git", "Önizle"]
         )
         
         header = self.table.horizontalHeader()
@@ -159,12 +160,17 @@ class FileListFrame(QFrame):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)  # Önizleme sütunu
         
         self.table.setColumnWidth(0, 30)
         self.table.setColumnWidth(2, 70)
         self.table.setColumnWidth(4, 100)
         self.table.setColumnWidth(5, 40)
+        self.table.setColumnWidth(6, 40)  # Önizleme sütunu genişliği
 
+        # Tablo tıklama olayını bağla
+        self.table.cellClicked.connect(self._on_cell_clicked)
+        
         # Klasör görünümü ayarları
         self.folder_tree = QTreeWidget()
         self.folder_tree.setHeaderLabels(["Dosya/Klasör", "Boyut", "Git"])
@@ -314,6 +320,12 @@ class FileListFrame(QFrame):
                 self.table.setItem(row, 3, QTableWidgetItem(data['folder']))
                 self.table.setItem(row, 4, QTableWidgetItem(self.format_size(data['size'])))
                 self.table.setItem(row, 5, QTableWidgetItem(""))  # Git durumu için boş hücre
+                
+                # Önizleme ikonu
+                preview_item = QTableWidgetItem("👁")
+                preview_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                preview_item.setToolTip("Dosyayı önizle")
+                self.table.setItem(row, 6, preview_item)
                 
                 # Dosya yolunu sakla
                 self.table.item(row, 1).setData(Qt.ItemDataRole.UserRole, data['path'])
@@ -785,6 +797,12 @@ class FileListFrame(QFrame):
         self.table.setItem(row, 4, QTableWidgetItem(self.format_size(data['size'])))
         self.table.setItem(row, 5, QTableWidgetItem(""))  # Git durumu için boş hücre
         
+        # Önizleme ikonu
+        preview_item = QTableWidgetItem("👁")
+        preview_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        preview_item.setToolTip("Dosyayı önizle")
+        self.table.setItem(row, 6, preview_item)
+        
         # Dosya yolunu gizli data olarak sakla
         self.table.item(row, 1).setData(Qt.ItemDataRole.UserRole, data['path'])
 
@@ -827,3 +845,48 @@ class FileListFrame(QFrame):
             folder_item.setCheckState(0, Qt.CheckState.Unchecked)
         else:
             folder_item.setCheckState(0, Qt.CheckState.PartiallyChecked)
+
+    def _on_cell_clicked(self, row: int, column: int):
+        """Tablo hücresine tıklandığında çağrılır."""
+        if column == 6:  # Önizleme sütunu
+            name_item = self.table.item(row, 1)
+            if name_item:
+                file_path = name_item.data(Qt.ItemDataRole.UserRole)
+                if file_path:
+                    dialog = FilePreviewDialog(file_path, self)
+                    dialog.exec()
+
+class FilePreviewDialog(QDialog):
+    """Dosya önizleme penceresi."""
+    
+    def __init__(self, file_path, parent=None):
+        super().__init__(parent)
+        self.file_path = file_path
+        self.setup_ui()
+        self.load_file_content()
+        
+    def setup_ui(self):
+        """Kullanıcı arayüzünü oluşturur."""
+        self.setWindowTitle(f"Dosya Önizleme - {Path(self.file_path).name}")
+        self.setMinimumSize(800, 600)
+        
+        layout = QVBoxLayout(self)
+        
+        # Metin görüntüleyici
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        layout.addWidget(self.text_edit)
+        
+        # Kapat butonu
+        close_btn = QPushButton("Kapat")
+        close_btn.clicked.connect(self.close)
+        layout.addWidget(close_btn)
+        
+    def load_file_content(self):
+        """Dosya içeriğini yükler."""
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            self.text_edit.setText(content)
+        except Exception as e:
+            self.text_edit.setText(f"Dosya açılamadı: {str(e)}")
