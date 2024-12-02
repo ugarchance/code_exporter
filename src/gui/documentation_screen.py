@@ -293,34 +293,169 @@ class DocumentationScreen(QWidget):
 
     def init_ui(self):
         main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(10)
+        
+        # Ana stil
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #1a1a1a;
+                color: #e0e0e0;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }
+            QTreeView {
+                background-color: #252525;
+                border: 1px solid #3a3a3a;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QTreeView::item {
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QTreeView::item:hover {
+                background-color: #353535;
+            }
+            QTreeView::item:selected {
+                background-color: #2d5a88;
+            }
+            QComboBox {
+                background-color: #252525;
+                border: 1px solid #3a3a3a;
+                border-radius: 5px;
+                padding: 5px;
+                min-height: 25px;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 20px;
+            }
+            QComboBox::down-arrow {
+                image: url(:/icons/down-arrow.png);
+            }
+            QTextEdit {
+                background-color: #252525;
+                border: 1px solid #3a3a3a;
+                border-radius: 5px;
+                padding: 5px;
+                selection-background-color: #2d5a88;
+            }
+            QPushButton {
+                background-color: #2d5a88;
+                border: none;
+                border-radius: 5px;
+                padding: 8px 15px;
+                color: white;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #366ba2;
+            }
+            QPushButton:pressed {
+                background-color: #244b73;
+            }
+            QPushButton:disabled {
+                background-color: #404040;
+                color: #808080;
+            }
+            QLabel {
+                color: #e0e0e0;
+                font-weight: bold;
+            }
+            QProgressBar {
+                border: none;
+                border-radius: 3px;
+                background-color: #252525;
+                text-align: center;
+                color: white;
+            }
+            QProgressBar::chunk {
+                background-color: #2d5a88;
+                border-radius: 3px;
+            }
+            QTabWidget::pane {
+                border: 1px solid #3a3a3a;
+                border-radius: 5px;
+                background-color: #252525;
+            }
+            QTabBar::tab {
+                background-color: #1a1a1a;
+                border: 1px solid #3a3a3a;
+                border-bottom: none;
+                border-top-left-radius: 5px;
+                border-top-right-radius: 5px;
+                padding: 8px 15px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background-color: #252525;
+                border-bottom: 2px solid #2d5a88;
+            }
+            QTabBar::tab:hover {
+                background-color: #303030;
+            }
+            QSplitter::handle {
+                background-color: #3a3a3a;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background-color: #252525;
+                width: 10px;
+                margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #404040;
+                border-radius: 5px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #4a4a4a;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0;
+            }
+        """)
         
         # API Ayarları
         api_layout = QHBoxLayout()
-        api_label = QLabel("Gemini API Anahtarı:")
+        api_label = QLabel("API Anahtarı")
         self.api_input = QTextEdit()
-        self.api_input.setMaximumHeight(30)
+        self.api_input.setMaximumHeight(35)
+        self.api_input.setPlaceholderText("Gemini API anahtarınızı buraya girin...")
         api_layout.addWidget(api_label)
         api_layout.addWidget(self.api_input)
         main_layout.addLayout(api_layout)
         
         # Ana içerik bölümü
         content_splitter = QSplitter(Qt.Orientation.Horizontal)
+        content_splitter.setHandleWidth(1)
         
         # Sol panel - Dosya gezgini
+        file_panel = QWidget()
+        file_layout = QVBoxLayout(file_panel)
+        file_layout.setContentsMargins(0, 0, 0, 0)
+        
+        file_header = QLabel("📁 Dosya Gezgini")
+        file_layout.addWidget(file_header)
+        
         self.file_tree = QTreeView()
         self.file_model = FileSystemModel(self.project_path)
         self.file_tree.setModel(self.file_model)
         self.file_tree.clicked.connect(self.on_file_selected)
+        self.file_tree.setHeaderHidden(True)
+        file_layout.addWidget(self.file_tree)
         
         # Orta panel - Metod listesi
         method_panel = QWidget()
         method_layout = QVBoxLayout(method_panel)
+        method_layout.setContentsMargins(5, 0, 5, 0)
         
-        # Dil etiketi
-        self.language_label = QLabel("Dil: -")
+        self.language_label = QLabel("💻 Dil: -")
         method_layout.addWidget(self.language_label)
         
-        method_layout.addWidget(QLabel("Metodlar:"))
+        method_header = QLabel("🔧 Metodlar")
+        method_layout.addWidget(method_header)
+        
         self.method_combo = QComboBox()
         self.method_combo.currentTextChanged.connect(self.on_method_selected)
         method_layout.addWidget(self.method_combo)
@@ -328,10 +463,11 @@ class DocumentationScreen(QWidget):
         # Sağ panel - Kod ve çıktı
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
         
         # Dokümantasyon Modu
         mode_layout = QHBoxLayout()
-        mode_label = QLabel("Dokümantasyon Modu:")
+        mode_label = QLabel("🎯 Mod:")
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["Metod Bazlı", "Dosya Bazlı", "Klasör Bazlı"])
         self.mode_combo.currentTextChanged.connect(self.on_mode_changed)
@@ -340,32 +476,35 @@ class DocumentationScreen(QWidget):
         right_layout.addLayout(mode_layout)
         
         # Kod Görüntüleme
+        code_header = QLabel("📝 Kod")
+        right_layout.addWidget(code_header)
+        
         self.code_display = QTextEdit()
         self.code_display.setReadOnly(True)
         self.code_display.setPlaceholderText("Seçilen kod burada görüntülenecek...")
+        right_layout.addWidget(self.code_display)
         
         # İlerleme çubuğu
         self.progress_bar = QProgressBar()
+        self.progress_bar.setMaximumHeight(3)
+        self.progress_bar.setTextVisible(False)
+        right_layout.addWidget(self.progress_bar)
         
-        # Dokümantasyon çıktısı - Tab widget ile
+        # Dokümantasyon çıktısı
+        doc_header = QLabel("📄 Dokümantasyon")
+        right_layout.addWidget(doc_header)
+        
         self.output_tabs = QTabWidget()
-        
-        # Düz metin görünümü
+        self.markdown_viewer = MarkdownViewer()
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
         
-        # Markdown görünümü
-        self.markdown_viewer = MarkdownViewer()
-        
-        self.output_tabs.addTab(self.markdown_viewer, "Markdown Görünümü")
-        self.output_tabs.addTab(self.output_text, "Düz Metin")
-        
-        right_layout.addWidget(self.code_display)
-        right_layout.addWidget(self.progress_bar)
+        self.output_tabs.addTab(self.markdown_viewer, "✨ Markdown")
+        self.output_tabs.addTab(self.output_text, "📝 Düz Metin")
         right_layout.addWidget(self.output_tabs)
         
         # Panelleri splitter'a ekle
-        content_splitter.addWidget(self.file_tree)
+        content_splitter.addWidget(file_panel)
         content_splitter.addWidget(method_panel)
         content_splitter.addWidget(right_panel)
         
@@ -375,15 +514,16 @@ class DocumentationScreen(QWidget):
         
         # Kontrol butonları
         button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(0, 10, 0, 0)
         
-        self.generate_btn = QPushButton("Dokümantasyon Oluştur")
+        self.generate_btn = QPushButton("✨ Dokümantasyon Oluştur")
         self.generate_btn.clicked.connect(self.generate_documentation)
         
-        self.save_md_btn = QPushButton("Markdown Olarak Kaydet")
+        self.save_md_btn = QPushButton("💾 Markdown Kaydet")
         self.save_md_btn.clicked.connect(self.save_as_markdown)
         self.save_md_btn.setEnabled(False)
         
-        self.clear_btn = QPushButton("Temizle")
+        self.clear_btn = QPushButton("🗑️ Temizle")
         self.clear_btn.clicked.connect(self.clear_all)
         
         button_layout.addWidget(self.generate_btn)
@@ -392,8 +532,8 @@ class DocumentationScreen(QWidget):
         main_layout.addLayout(button_layout)
         
         self.setLayout(main_layout)
-        self.setWindowTitle("Teknik Dokümantasyon Oluşturucu")
-        self.resize(1000, 700)
+        self.setWindowTitle("✨ Teknik Dokümantasyon Oluşturucu")
+        self.resize(1200, 800)
 
     def on_file_selected(self, index):
         file_path = self.file_model.data(index, Qt.ItemDataRole.UserRole)
@@ -404,7 +544,7 @@ class DocumentationScreen(QWidget):
         if language_info:
             self.current_file = file_path
             self.current_language = language_info['name']
-            self.language_label.setText(f"Dil: {self.current_language}")
+            self.language_label.setText(f"💻 Dil: {self.current_language}")
             
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
