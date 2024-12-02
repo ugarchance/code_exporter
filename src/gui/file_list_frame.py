@@ -481,7 +481,7 @@ class FileListFrame(QFrame):
             show_row = False
             
             if self.filter_all.isChecked():
-                # Tümü seçiliyse her dosyayı göster
+                # Tümü seçiliyse her dosyay göster
                 show_row = True
             else:
                 # Dosya Git durumuna sahipse ve ilgili filtre seçiliyse göster
@@ -636,7 +636,12 @@ class FileListFrame(QFrame):
                 file_item.setText(1, self.format_size(file_data['size']))
                 file_item.setData(0, Qt.ItemDataRole.UserRole, file_data['path'])
                 file_item.setFlags(file_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                file_item.setCheckState(0, Qt.CheckState.Unchecked)
+                
+                # Eğer dosya seçili dosyalar listesindeyse işaretle
+                if file_data['path'] in self.selected_files:
+                    file_item.setCheckState(0, Qt.CheckState.Checked)
+                else:
+                    file_item.setCheckState(0, Qt.CheckState.Unchecked)
                 
                 # Git durumunu ekle
                 if Path(file_data['path']) in self.git_status:
@@ -645,6 +650,9 @@ class FileListFrame(QFrame):
             
             # Alt klasörleri işle
             self._populate_folder_tree(folder_item, content['subfolders'])
+            
+            # Klasör durumunu güncelle
+            self._update_folder_check_state(folder_item)
 
     def _update_list_view(self):
         """Liste görünümünü günceller."""
@@ -695,23 +703,26 @@ class FileListFrame(QFrame):
     def _on_tree_item_changed(self, item: QTreeWidgetItem, column: int):
         """Ağaç görünümünde öğe değişikliklerini işler."""
         if column == 0:  # Checkbox sütunu
+            # Sinyal bağlantısını geçici olarak kaldır
+            self.folder_tree.itemChanged.disconnect(self._on_tree_item_changed)
+            
             is_checked = item.checkState(0) == Qt.CheckState.Checked
             file_path = item.data(0, Qt.ItemDataRole.UserRole)
             
             if not file_path:  # Klasör öğesi
                 # Alt öğelerin tümünü işaretle/işareti kaldır
-                child_count = item.childCount()
-                for i in range(child_count):
-                    child = item.child(i)
-                    child.setCheckState(0, item.checkState(0))
+                self._set_children_check_state(item, is_checked)
             else:  # Dosya öğesi
                 if is_checked:
                     self.selected_files.add(file_path)
                 else:
                     self.selected_files.discard(file_path)
-                    
-                # Üst klasörün durumunu kontrol et
-                self._update_parent_check_state(item.parent())
+            
+            # Üst klasörün durumunu kontrol et
+            self._update_parent_check_state(item.parent())
+            
+            # Sinyal bağlantısını geri ekle
+            self.folder_tree.itemChanged.connect(self._on_tree_item_changed)
             
             # Seçim değişikliğini bildir
             self.selection_changed.emit(list(self.selected_files))
@@ -776,3 +787,43 @@ class FileListFrame(QFrame):
         
         # Dosya yolunu gizli data olarak sakla
         self.table.item(row, 1).setData(Qt.ItemDataRole.UserRole, data['path'])
+
+    def _set_children_check_state(self, item: QTreeWidgetItem, checked: bool):
+        """Alt öğelerin seçim durumunu ayarlar."""
+        state = Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+        
+        for i in range(item.childCount()):
+            child = item.child(i)
+            child.setCheckState(0, state)
+            
+            # Dosya yolunu al
+            file_path = child.data(0, Qt.ItemDataRole.UserRole)
+            if file_path:
+                if checked:
+                    self.selected_files.add(file_path)
+                else:
+                    self.selected_files.discard(file_path)
+            
+            # Alt klasörleri de işle
+            if child.childCount() > 0:
+                self._set_children_check_state(child, checked)
+
+    def _update_folder_check_state(self, folder_item: QTreeWidgetItem):
+        """Klasör öğesinin seçim durumunu alt öğelere göre günceller."""
+        if folder_item is None:
+            return
+        
+        child_count = folder_item.childCount()
+        checked_count = 0
+        
+        for i in range(child_count):
+            child = folder_item.child(i)
+            if child.checkState(0) == Qt.CheckState.Checked:
+                checked_count += 1
+        
+        if checked_count == child_count:
+            folder_item.setCheckState(0, Qt.CheckState.Checked)
+        elif checked_count == 0:
+            folder_item.setCheckState(0, Qt.CheckState.Unchecked)
+        else:
+            folder_item.setCheckState(0, Qt.CheckState.PartiallyChecked)
