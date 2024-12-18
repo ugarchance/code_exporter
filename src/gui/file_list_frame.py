@@ -3,12 +3,13 @@ from PyQt6.QtWidgets import (QFrame, QVBoxLayout, QHBoxLayout, QLineEdit,
                              QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QLabel, QProgressDialog, QApplication,
                              QCheckBox, QRadioButton, QTreeWidget, QTreeWidgetItem, QButtonGroup, QStackedWidget,
-                             QDialog, QTextEdit)
+                             QDialog, QTextEdit, QFileDialog, QMessageBox)
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QIcon
 import os
 from pathlib import Path
 import time
+import csv
 from PyQt6.QtGui import QIcon, QColor
 from src.core.git.git_manager import GitManager
 from src.core.git.git_exceptions import GitException
@@ -894,6 +895,145 @@ class FileListFrame(QFrame):
                 if file_path:
                     dialog = FilePreviewDialog(file_path, self)
                     dialog.exec()
+
+    def export_selections_to_csv(self):
+        """Seçili dosyaları CSV dosyasına aktarır."""
+        selected_files = self.get_selected_files()
+        if not selected_files:
+            QMessageBox.warning(self, "Uyarı", "Dışa aktarılacak seçili dosya bulunamadı!")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Seçimleri Kaydet",
+            str(Path.home() / "secili_dosyalar.csv"),
+            "CSV Dosyaları (*.csv)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(['dosya_yolu', 'proje_yolu'])
+                base_path = str(self.current_directory) if self.current_directory else ""
+                
+                for file_path in selected_files:
+                    abs_path = str(file_path)
+                    rel_path = os.path.relpath(abs_path, base_path) if base_path else abs_path
+                    writer.writerow([abs_path, rel_path])
+                    
+            QMessageBox.information(
+                self,
+                "Başarılı",
+                f"Seçili dosyalar başarıyla dışa aktarıldı:\n{file_path}"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Hata",
+                f"Dosyalar dışa aktarılırken hata oluştu:\n{str(e)}"
+            )
+
+    def import_selections_from_csv(self):
+        """CSV dosyasından dosya seçimlerini içe aktarır."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Seçimleri Yükle",
+            str(Path.home()),
+            "CSV Dosyaları (*.csv)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            imported_files = []
+            with open(file_path, 'r', encoding='utf-8') as csvfile:
+                reader = csv.DictReader(csvfile)
+                for row in reader:
+                    if 'dosya_yolu' in row:
+                        file_path = Path(row['dosya_yolu'])
+                        if file_path.exists():
+                            imported_files.append(file_path)
+                    elif 'proje_yolu' in row and self.current_directory:
+                        rel_path = row['proje_yolu']
+                        abs_path = Path(self.current_directory) / rel_path
+                        if abs_path.exists():
+                            imported_files.append(abs_path)
+
+            if not imported_files:
+                QMessageBox.warning(
+                    self,
+                    "Uyarı",
+                    "İçe aktarılacak geçerli dosya bulunamadı!"
+                )
+                return
+
+            # Mevcut seçimleri temizle
+            self.toggle_all_selection(False)
+
+            # Bulunan dosyaları seç
+            for file_path in imported_files:
+                self._select_file_in_views(file_path)
+
+            QMessageBox.information(
+                self,
+                "Başarılı",
+                f"{len(imported_files)} dosya başarıyla içe aktarıldı ve seçildi."
+            )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Hata",
+                f"Dosyalar içe aktarılırken hata oluştu:\n{str(e)}"
+            )
+
+    def _select_file_in_views(self, file_path: Path):
+        """Verilen dosyayı hem liste hem de ağaç görünümünde seçer."""
+        # Dosyayı selected_files setine ekle
+        self.selected_files.add(str(file_path))
+        
+        # Liste görünümünde seç
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 1)  # Dosya yolu sütunu
+            if item and Path(item.data(Qt.ItemDataRole.UserRole)) == file_path:
+                checkbox = self.table.item(row, 0)
+                if checkbox:
+                    checkbox.setCheckState(Qt.CheckState.Checked)
+                break
+
+        # Ağaç görünümünde seç
+        def find_and_select_in_tree(item: QTreeWidgetItem):
+            if item is None:
+                return False
+            
+            # Dosya öğesi kontrolü
+            item_path = item.data(0, Qt.ItemDataRole.UserRole)
+            if item_path and Path(item_path) == file_path:
+                item.setCheckState(0, Qt.CheckState.Checked)
+                return True
+
+            # Alt öğeleri kontrol et
+            for i in range(item.childCount()):
+                child = item.child(i)
+                if find_and_select_in_tree(child):
+                    # Üst klasörün durumunu güncelle
+                    self._update_parent_check_state(item)
+                    return True
+            return False
+
+        # Ağaç görünümünde seçimi uygula
+        root = self.folder_tree.invisibleRootItem()
+        for i in range(root.childCount()):
+            if find_and_select_in_tree(root.child(i)):
+                break
+
+        # Seçim değişikliğini bildir
+        self.selection_changed.emit(list(self.selected_files))
+        self.update_info_label()
 
 class FilePreviewDialog(QDialog):
     """Dosya önizleme penceresi."""

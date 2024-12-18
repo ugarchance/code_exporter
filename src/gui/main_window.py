@@ -85,7 +85,22 @@ class MainWindow(QMainWindow):
         # Dosya menüsü
         file_menu = menubar.addMenu("Dosya")
         
-         # Git menüsü
+        # Seçim menüsü
+        selection_menu = menubar.addMenu("Seçimler")
+        
+        # Seçimleri dışa aktar
+        export_action = QAction("Seçimleri Dışa Aktar", self)
+        export_action.setShortcut("Ctrl+E")
+        export_action.triggered.connect(self.export_selections)
+        selection_menu.addAction(export_action)
+        
+        # Seçimleri içe aktar
+        import_action = QAction("Seçimleri İçe Aktar", self)
+        import_action.setShortcut("Ctrl+I")
+        import_action.triggered.connect(self.import_selections)
+        selection_menu.addAction(import_action)
+        
+        # Git menüsü
         git_menu = menubar.addMenu("Git")
     
         # Repository yenile
@@ -410,3 +425,11 @@ class MainWindow(QMainWindow):
                 "Hata",
                 f"Dokümantasyon ekranı açılırken bir hata oluştu:\n{str(e)}"
             )
+    
+    def export_selections(self):
+        """Seçili dosyaları CSV dosyasına aktarır."""
+        self.file_list.export_selections_to_csv()
+        
+    def import_selections(self):
+        """CSV dosyasından dosya seçimlerini içe aktarır."""
+        self.file_list.import_selections_from_csv()
