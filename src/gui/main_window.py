@@ -182,12 +182,12 @@ class MainWindow(QMainWindow):
         from src.core.file_exporter import FileExporter
         from src.core.template_manager import TemplateManager
         
-        file_scanner = FileScanner()
+        file_scanner = FileScanner(config_manager=self.config_manager)
         file_exporter = FileExporter()
         template_manager = TemplateManager(
             self.config_manager.get_app_dirs()['templates']
         )
-        
+            
         # Dosya listesi paneli
         self.file_list = FileListFrame(file_scanner, git_manager=self.git_manager)
         self.splitter.addWidget(self.file_list)
@@ -300,6 +300,14 @@ class MainWindow(QMainWindow):
         """Ayarlar penceresini gösterir."""
         dialog = SettingsDialog(self.config_manager, self)
         dialog.exec()
+        
+    def show_settings(self):
+        """Ayarlar penceresini gösterir."""
+        dialog = SettingsDialog(self.config_manager, self)
+        result = dialog.exec()
+        
+        if result == QDialog.DialogCode.Accepted and self.file_list and hasattr(self.file_list, 'file_scanner'):
+            self.file_list.file_scanner.refresh_extensions()
     
     def show_git_settings(self):
         """Git ayarları penceresini gösterir."""

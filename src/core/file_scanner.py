@@ -8,27 +8,43 @@ from queue import Queue
 import logging
 from ..models.file_info import FileInfo
 
+
 class FileScanner:
     """Dosya sistemi tarama ve filtreleme işlemlerini yöneten sınıf."""
     
-    # Desteklenen dosya uzantıları
-    SUPPORTED_EXTENSIONS = {
-        '.java',    # Java
-        '.cs',      # C#
-        '.js',      # JavaScript
-        '.jsx',     # React JSX
-        '.ts',      # TypeScript
-        '.tsx',    
-         '.py', # React TSX
-    }
-    
-    def __init__(self):
+    def __init__(self, config_manager=None):
         self._scanned_files: List[FileInfo] = []
         self._excluded_dirs: Set[str] = {'.git', 'node_modules', 'bin', 'obj', 'build', 'dist'}
         self._lock = Lock()
         self._file_queue = Queue(maxsize=1000)
         self._processed_count = 0
         self._total_files = 0
+        self.config_manager = config_manager
+        
+        # Konfigürasyondan desteklenen uzantıları yükle
+        self._supported_extensions = self._load_supported_extensions()
+    
+    def _load_supported_extensions(self) -> Set[str]:
+        """Konfigürasyondan desteklenen uzantıları yükler."""
+        if self.config_manager:
+            extensions = self.config_manager.get('supported_extensions', [
+                '.java', '.cs', '.js', '.jsx', '.ts', '.tsx', '.py'
+            ])
+            return set(extensions)
+        # Eğer config_manager yoksa varsayılan uzantıları kullan
+        return {
+            '.java',    # Java
+            '.cs',      # C#
+            '.js',      # JavaScript
+            '.jsx',     # React JSX
+            '.ts',      # TypeScript
+            '.tsx',     # React TSX
+            '.py'       # Python
+        }
+    
+    def refresh_extensions(self):
+        """Desteklenen uzantıları yeniden yükler."""
+        self._supported_extensions = self._load_supported_extensions()
         
     @property
     def scanned_files(self) -> List[FileInfo]:
@@ -39,9 +55,10 @@ class FileScanner:
         """Klasörün atlanıp atlanmayacağını kontrol eder."""
         return dir_name.startswith('.') or dir_name in self._excluded_dirs
     
+
     def _is_supported_file(self, file_path: Path) -> bool:
         """Dosyanın desteklenen bir uzantıya sahip olup olmadığını kontrol eder."""
-        return file_path.suffix.lower() in self.SUPPORTED_EXTENSIONS
+        return file_path.suffix.lower() in self._supported_extensions
     
     def _scan_directory_fast(self, directory: Path) -> None:
         """Verilen klasörü ve alt klasörlerini hızlı bir şekilde tarar."""

@@ -107,12 +107,11 @@ class SettingsDialog(QDialog):
             # Dialog'u kapat
             self.accept()
             
-            # Yeniden başlatma gerektiğini bildir
+            # Ayarların kaydedildiğini bildir
             QMessageBox.information(
                 self,
                 "Ayarlar Kaydedildi",
-                "Bazı ayarların etkili olması için uygulamayı yeniden başlatmanız gerekebilir."
+                "Ayarlar başarıyla kaydedildi ve uygulanacak."
             )
-            
         except ValueError as e:
             QMessageBox.warning(self, "Hata", str(e))
