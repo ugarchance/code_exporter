@@ -4,14 +4,16 @@ from datetime import datetime
 
 class FileExporter:
     """Dosya dışa aktarma işlemlerini yöneten sınıf."""
-    
-    def __init__(self):
+
+    def __init__(self, extension_manager=None):
         self.export_format = """Path: {file_path}
 Code:
 {file_content}
 {separator}
 """
         self.separator = "\n" + "=" * 80 + "\n"
+        from .extension_manager import ExtensionManager
+        self.extension_manager = extension_manager or ExtensionManager()
     
     def _create_export_file(self, output_path: Path) -> None:
         """Dışa aktarma dosyasını oluşturur ve UTF-8 BOM ekler."""
@@ -34,14 +36,6 @@ Code:
             # Herhangi bir hata durumunda orijinal path'i döndür
             return str(file_path)
     
-    def _process_java_content(self, content: str) -> str:
-        """Java dosyasındaki import ve package satırlarını filtreler."""
-        lines = content.splitlines()
-        filtered_lines = [
-            line for line in lines
-            if not line.strip().startswith(("import ", "package "))
-        ]
-        return "\n".join(filtered_lines)
 
     def export_files(
         self,
@@ -97,10 +91,9 @@ Code:
                     # Dosya içeriğini oku
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
-                    
-                    # Java dosyası ise içeriği filtrele
-                    if str(file_path).lower().endswith('.java'):
-                        content = self._process_java_content(content)
+
+                    # Uzantıya özel içerik işleme
+                    content = self.extension_manager.process_content(Path(file_path), content)
                     
                     # Path'i formatla
                     display_path = self._format_display_path(file_path, ref_path)

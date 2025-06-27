@@ -181,9 +181,11 @@ class MainWindow(QMainWindow):
         from src.core.file_scanner import FileScanner
         from src.core.file_exporter import FileExporter
         from src.core.template_manager import TemplateManager
-        
-        file_scanner = FileScanner(config_manager=self.config_manager)
-        file_exporter = FileExporter()
+        from src.core.extension_manager import ExtensionManager
+
+        ext_mgr = ExtensionManager(self.config_manager.get('supported_extensions', None))
+        file_scanner = FileScanner(config_manager=self.config_manager, extension_manager=ext_mgr)
+        file_exporter = FileExporter(extension_manager=ext_mgr)
         template_manager = TemplateManager(
             self.config_manager.get_app_dirs()['templates']
         )

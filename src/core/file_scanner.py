@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import List, Set, Generator, Dict
+from typing import List, Set, Generator, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 import time
@@ -12,7 +12,7 @@ from ..models.file_info import FileInfo
 class FileScanner:
     """Dosya sistemi tarama ve filtreleme işlemlerini yöneten sınıf."""
     
-    def __init__(self, config_manager=None):
+    def __init__(self, config_manager=None, extension_manager=None):
         self._scanned_files: List[FileInfo] = []
         self._excluded_dirs: Set[str] = {'.git', 'node_modules', 'bin', 'obj', 'build', 'dist'}
         self._lock = Lock()
@@ -20,31 +20,22 @@ class FileScanner:
         self._processed_count = 0
         self._total_files = 0
         self.config_manager = config_manager
-        
-        # Konfigürasyondan desteklenen uzantıları yükle
-        self._supported_extensions = self._load_supported_extensions()
-    
-    def _load_supported_extensions(self) -> Set[str]:
-        """Konfigürasyondan desteklenen uzantıları yükler."""
-        if self.config_manager:
-            extensions = self.config_manager.get('supported_extensions', [
-                '.java', '.cs', '.js', '.jsx', '.ts', '.tsx', '.py'
-            ])
-            return set(extensions)
-        # Eğer config_manager yoksa varsayılan uzantıları kullan
-        return {
-            '.java',    # Java
-            '.cs',      # C#
-            '.js',      # JavaScript
-            '.jsx',     # React JSX
-            '.ts',      # TypeScript
-            '.tsx',     # React TSX
-            '.py'       # Python
-        }
+
+        from .extension_manager import ExtensionManager
+        if extension_manager is None:
+            exts = None
+            if self.config_manager:
+                exts = self.config_manager.get('supported_extensions', None)
+            self.extension_manager = ExtensionManager(exts)
+        else:
+            self.extension_manager = extension_manager
     
     def refresh_extensions(self):
         """Desteklenen uzantıları yeniden yükler."""
-        self._supported_extensions = self._load_supported_extensions()
+        exts = None
+        if self.config_manager:
+            exts = self.config_manager.get('supported_extensions', None)
+        self.extension_manager = type(self.extension_manager)(exts)
         
     @property
     def scanned_files(self) -> List[FileInfo]:
@@ -58,7 +49,7 @@ class FileScanner:
 
     def _is_supported_file(self, file_path: Path) -> bool:
         """Dosyanın desteklenen bir uzantıya sahip olup olmadığını kontrol eder."""
-        return file_path.suffix.lower() in self._supported_extensions
+        return self.extension_manager.is_supported(file_path.suffix)
     
     def _scan_directory_fast(self, directory: Path) -> None:
         """Verilen klasörü ve alt klasörlerini hızlı bir şekilde tarar."""
@@ -203,44 +194,3 @@ class FileScanner:
     def get_selected_files(self) -> List[FileInfo]:
         """Seçili dosyaları döndürür."""
         return [f for f in self._scanned_files if f.is_selected]
-
-    def _process_java_content(self, content: str) -> str:
-        """Java dosyasının içeriğindeki import satırlarını filtreler."""
-        lines = content.splitlines()
-        filtered_lines = [
-            line for line in lines 
-            if not line.strip().startswith("import ") and 
-               not line.strip().startswith("package ")
-        ]
-        return "\n".join(filtered_lines)
-
-    def _read_file_content(self, file_path: Path) -> str:
-        """
-        Dosya içeriğini okur ve gerekiyorsa filtreler.
-        """
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                
-            # Debug için dosya tipini logla
-            logging.debug(f"Dosya uzantısı: {file_path.suffix}")
-                
-            # Java dosyası kontrolü
-            if str(file_path).lower().endswith('.java'):
-                lines = content.splitlines()
-                filtered_lines = []
-                
-                for line in lines:
-                    line = line.strip()
-                    # Import ve package satırlarını atla
-                    if line.startswith('import ') or line.startswith('package '):
-                        continue
-                    filtered_lines.append(line)
-                    
-                return '\n'.join(filtered_lines)
-                
-            return content
-            
-        except Exception as e:
-            logging.error(f"Dosya okuma hatası ({file_path}): {e}")
-            return ""
