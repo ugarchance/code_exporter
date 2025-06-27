@@ -191,7 +191,7 @@ class MainWindow(QMainWindow):
         )
             
         # Dosya listesi paneli
-        self.file_list = FileListFrame(file_scanner, git_manager=self.git_manager)
+        self.file_list = FileListFrame(file_scanner, git_manager=self.git_manager, config_manager=self.config_manager)
         self.splitter.addWidget(self.file_list)
         
         # Dışa aktarma paneli
@@ -308,8 +308,13 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self.config_manager, self)
         result = dialog.exec()
         
-        if result == QDialog.DialogCode.Accepted and self.file_list and hasattr(self.file_list, 'file_scanner'):
-            self.file_list.file_scanner.refresh_extensions()
+        if result == QDialog.DialogCode.Accepted and self.file_list:
+            # FileScanner'ın extension'larını yenile
+            if hasattr(self.file_list, 'file_scanner') and self.file_list.file_scanner:
+                self.file_list.file_scanner.refresh_extensions()
+            # FileListFrame'in extension'larını da yenile
+            if hasattr(self.file_list, 'refresh_extensions'):
+                self.file_list.refresh_extensions()
     
     def show_git_settings(self):
         """Git ayarları penceresini gösterir."""

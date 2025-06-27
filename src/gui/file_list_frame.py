@@ -21,10 +21,11 @@ class FileListFrame(QFrame):
     # Seçili dosyalar sinyali
     selection_changed = pyqtSignal(list)
     
-    def __init__(self, file_scanner=None, git_manager=None):
+    def __init__(self, file_scanner=None, git_manager=None, config_manager=None):
         super().__init__()
         self.file_scanner = file_scanner
         self.git_manager = git_manager
+        self.config_manager = config_manager
         self.current_directory = None
         self.git_status = {}
         self.total_files = 0
@@ -237,6 +238,12 @@ class FileListFrame(QFrame):
             except GitException as e:
                 logging.error(f"Git durumu alınamadı: {e}")
                 self.update_info_label(f"Git hatası: {str(e)}")
+    
+    def refresh_extensions(self):
+        """Extension'ları yeniler ve mevcut dizini yeniden tarar."""
+        if self.current_directory:
+            self.scan_directory(self.current_directory)
+    
     def format_size(self, size):
         """Dosya boyutunu formatlar."""
         for unit in ['B', 'KB', 'MB', 'GB']:
@@ -270,8 +277,13 @@ class FileListFrame(QFrame):
             self.selected_files.clear()
             self.visible_rows.clear()
             
-            # Desteklenen uzantılar
-            valid_extensions = {'.cs', '.java', '.js', '.jsx', '.ts', '.tsx', '.py'}
+            # Desteklenen uzantılar - ConfigManager'dan al
+            if self.config_manager:
+                extensions_list = self.config_manager.get('supported_extensions', ['.cs', '.java', '.js', '.jsx', '.ts', '.tsx', '.py', '.css'])
+                valid_extensions = set(extensions_list)
+            else:
+                # Fallback - eğer config_manager yoksa varsayılan
+                valid_extensions = {'.cs', '.java', '.js', '.jsx', '.ts', '.tsx', '.py', '.css'}
             skip_folders = {'.git', 'node_modules', 'bin', 'obj', 'build', 'dist'}
             
             # Dosyaları topla

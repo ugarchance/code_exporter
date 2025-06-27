@@ -12,7 +12,7 @@ class ConfigManager:
         'max_workers': 4,
         'batch_size': 1000,
         'excluded_directories': ['.git', 'node_modules', 'bin', 'obj', 'build', 'dist'],
-        'supported_extensions': ['.java', '.cs', '.js', '.jsx', '.ts', '.tsx','.py'],
+        'supported_extensions': ['.java', '.cs', '.js', '.jsx', '.ts', '.tsx', '.py', '.css'],
         'default_encoding': 'utf-8',
         'window_size': {'width': 1024, 'height': 768},
         'window_position': {'x': 100, 'y': 100},
@@ -65,7 +65,7 @@ class ConfigManager:
         # Varsayılan ayarlar
         self.config: Dict[str, Any] = {
             'excluded_directories': ['.git', 'node_modules', 'bin', 'obj', 'build', 'dist'],
-            'supported_extensions': ['.java', '.cs', '.js', '.jsx', '.ts', '.tsx','.py'],
+            'supported_extensions': ['.java', '.cs', '.js', '.jsx', '.ts', '.tsx', '.py', '.css'],
             'max_workers': 4,
             'batch_size': 1000,
             'default_encoding': 'utf-8',
